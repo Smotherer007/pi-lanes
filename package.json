@@ -1,6 +1,6 @@
 {
   "name": "@patimweb/pi-lanes",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Lanes for pi: every prompt an extension triggers runs in its own pi process with its own session, so background work never blocks the session you type in",
   "keywords": [
     "pi-package",
