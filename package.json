@@ -1,0 +1,53 @@
+{
+  "name": "@patimweb/pi-lanes",
+  "version": "0.1.0",
+  "description": "Lanes for pi: every prompt an extension triggers runs in its own pi process with its own session, so background work never blocks the session you type in",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "concurrency",
+    "agents",
+    "background"
+  ],
+  "author": "Patrick Weppelmann",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Smotherer007/pi-lanes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Smotherer007/pi-lanes/issues"
+  },
+  "scripts": {
+    "build": "echo 'No build step defined'",
+    "test": "node scripts/test.mjs",
+    "test:watch": "node scripts/test.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typebox": ">=1.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.80.0",
+    "typebox": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@semantic-release/git": "^10.0.0",
+    "@types/node": "^22.0.0",
+    "semantic-release": "^25.0.0",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

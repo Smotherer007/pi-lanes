@@ -1,0 +1,8 @@
+.github/
+.gitignore
+test/
+.DS_Store
+*.tgz
+release.config.cjs
+graph-out/
+scripts/
