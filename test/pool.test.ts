@@ -6,10 +6,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LanePool, laneSessionDir, shouldContinue, type LaneJob, type LaneProcess } from "../src/pool.ts";
+import { LanePool, laneHash, laneSessionDir, shouldContinue, type LaneJob, type LaneProcess } from "../src/pool.ts";
 import { resolveConfig, type LanesConfig } from "../src/config.ts";
 import type { JournalEntry } from "../src/journal.ts";
 
@@ -21,6 +21,7 @@ class FakeLane extends EventEmitter {
 	command: string;
 	args: string[];
 	env: NodeJS.ProcessEnv;
+	cwd = "";
 	stdin = {
 		write: (chunk: string) => {
 			for (const line of chunk.split("\n").filter(Boolean)) this.commands.push(JSON.parse(line));
@@ -63,6 +64,7 @@ function setup(config: LanesConfig = {}) {
 		sweepIntervalMs: 0,
 		spawn: (command, args, options) => {
 			const p = new FakeLane(command, args, options.env);
+			p.cwd = options.cwd;
 			procs.push(p);
 			return p as unknown as LaneProcess;
 		},
@@ -91,6 +93,21 @@ describe("starting lanes", () => {
 		assert.deepEqual(p!.prompts()[0], { type: "prompt", message: "prompt for A" });
 	});
 
+	test("with a workspace root, every lane gets a directory of its own", () => {
+		const root = mkdtempSync(join(tmpdir(), "pi-lanes-ws-"));
+		const { pool, procs } = setup({ isolation: { workspace: root } });
+		pool.deliver(job("teams:1"));
+		pool.deliver(job("teams:2"));
+		assert.equal(procs[0]!.env.PI_LANE_WORKSPACE, join(root, laneHash("teams:1")));
+		assert.equal(procs[1]!.env.PI_LANE_WORKSPACE, join(root, laneHash("teams:2")));
+		assert.equal(procs[0]!.cwd, join(root, laneHash("teams:1")));
+		assert.ok(existsSync(join(root, laneHash("teams:2"))));
+	});
+	test("a hint's env cannot fake the lane's identity", () => {
+		const { pool, procs } = setup();
+		pool.deliver(job("teams:1", { env: { PI_LANE: "other" } }));
+		assert.equal(procs[0]!.env.PI_LANE, "teams:1");
+	});
 	test("an untrusted lane carries no trust flag", () => {
 		const { pool, procs } = setup();
 		pool.deliver(job("A"));

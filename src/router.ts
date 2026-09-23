@@ -89,7 +89,8 @@ export function sanitizeHint(value: unknown): LaneHint | undefined {
 	const env: Record<string, string> = {};
 	if (v.env && typeof v.env === "object") {
 		for (const [key, val] of Object.entries(v.env as Record<string, unknown>)) {
-			if (typeof val === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) env[key] = val;
+			// PI_LANE* is pi-lanes' own: who the lane is, whether it is trusted, who its children are.
+			if (typeof val === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !key.startsWith("PI_LANE")) env[key] = val;
 		}
 	}
 	return {

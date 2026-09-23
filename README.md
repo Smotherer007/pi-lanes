@@ -110,6 +110,54 @@ When a hint carries a `command` that is exactly one of these words:
 | `stopWords`, `resetWords` | see above | control words |
 | `unhinted` | `"lane"` | `"session"` keeps prompts without a hint in the front session |
 | `userGraceSeconds` | `10` | a prompt without a hint this soon after a key press stays in the front session |
+| `isolation` | see below | what a lane, and everything it starts, may reach |
+
+## Isolation
+
+Separate sessions keep a lane from *knowing* what other lanes talked about.
+Isolation keeps it from *looking*: a lane asked "what did Bob want?" can say
+that Bob was around, but not what about.
+
+Always on, without configuration:
+
+- **`<agent dir>/pi-lanes` is closed** to every lane and every process it
+  starts: sessions, journal, nothing of it can be read through a tool.
+- **`lanes_journal` shows who and when** in a lane: which lane, for whom, at
+  what time, how long. What was asked and answered only in the front session
+  and in lanes started as `trusted`.
+
+Configurable in `isolation`:
+
+```json
+"isolation": {
+  "lane":     { "allowedTools": ["subagent", "teams_send_chat_message", "teams_read_chat", "lanes_journal"] },
+  "children": { "blockedTools": ["teams_*", "subagent"] },
+  "ownLane":  { "teams_read_chat": { "param": "chat", "env": "PI_TEAMS_WORKER_CHAT" } },
+  "protectedPaths": ["~/.pi"],
+  "workspace": "/workspace/lanes"
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `lane.allowedTools` | tools the lane process may call (`*` globs); empty = all |
+| `lane.blockedTools` | tools the lane process may not call |
+| `children.blockedTools` | tools closed to what the lane starts (subagents, `pi -p`, …) |
+| `ownLane` | a tool argument must equal a variable from the lane's environment (the hint's `env`). The refusal names the right value, so the model corrects itself. A lane without the variable cannot use the tool at all. |
+| `protectedPaths` | more places closed to lanes and their children, e.g. `~/.pi` for all state and credentials |
+| `workspace` | every lane works in `<workspace>/<hash>`, one-off lanes too. The workspaces of other lanes are closed. |
+
+A lane and its children are told apart by `PI_LANE_CHILD`: the lane puts its
+pid there when it loads, and everything it starts inherits it. A hint's `env`
+cannot set any `PI_LANE*` variable.
+
+**How far it goes.** Tool lists and `ownLane` are exact. Paths are checked in
+two ways: path arguments are resolved (symlinks included), and every other
+string argument, a bash command above all, is searched for the protected paths
+in their usual spellings (absolute, `~/`, `$HOME/`). A command that assembles a
+path at run time gets past that search. It is a guard rail against a model
+that was talked into looking, not a sandbox. Where that matters, run lanes as
+an OS user of their own.
 
 ## Commands and tools
 
@@ -117,7 +165,7 @@ When a hint carries a `command` that is exactly one of these words:
 |---|---|
 | `/lanes` | which lanes work, idle or wait |
 | `/lanes stop <name>` | abort a lane's running turn |
-| `lanes_journal` | what the lanes were asked and answered; in a lane only when it was started as `trusted` |
+| `lanes_journal` | which lanes were active, for whom and when; what they were asked and answered only in the front session and in `trusted` lanes |
 
 Files, all below `~/.pi/agent/pi-lanes/`:
 
@@ -126,6 +174,8 @@ Files, all below `~/.pi/agent/pi-lanes/`:
 | `sessions/<hash>/` | sessions of a lane |
 | `sessions/once/` | sessions of one-off lanes |
 | `journal.jsonl` | start, steer, queue, stop, reset, result, duration, errors |
+
+With `isolation.workspace` set, lanes work in `<workspace>/<hash>`; the hash is the same as for the sessions.
 
 ## Things to know
 
@@ -138,7 +188,8 @@ Files, all below `~/.pi/agent/pi-lanes/`:
   environment variable through `env` that switches the loop off.
 - **Context is per lane.** Nothing from one lane reaches another by itself.
   Shared memory extensions still work across lanes, since they read the same
-  files.
+  files: close their tools with `lane.allowedTools` (and
+  `children.blockedTools`) when lanes belong to different people.
 
 ## License
 

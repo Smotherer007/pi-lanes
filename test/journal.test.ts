@@ -1,12 +1,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { journalRefusal, renderJournal } from "../src/tools.ts";
+import { mayReadContents, renderJournal } from "../src/tools.ts";
 import { laneIdentity } from "../src/lane.ts";
 
-test("the front session may always read the journal, a lane only when trusted", () => {
-	assert.equal(journalRefusal(undefined), undefined);
-	assert.equal(journalRefusal({ lane: "a", label: "A", trusted: true }), undefined);
-	assert.ok(journalRefusal({ lane: "a", label: "A", trusted: false }));
+test("the front session and trusted lanes see contents, other lanes only who and when", () => {
+	assert.equal(mayReadContents(undefined), true);
+	assert.equal(mayReadContents({ lane: "a", label: "A", trusted: true }), true);
+	assert.equal(mayReadContents({ lane: "a", label: "A", trusted: false }), false);
+});
+
+test("the outline shows who and when, never what", () => {
+	const now = Date.parse("2026-09-22T12:00:00Z");
+	const text = renderJournal(
+		[
+			{ at: "2026-09-22T11:00:00Z", lane: "teams:1", label: "Anna", event: "done", from: "anna@x.de", request: "Gehaltsgespräch vorbereiten", result: "Entwurf fertig", durationMs: 42_000 },
+			{ at: "2026-09-22T11:05:00Z", lane: "teams:1", label: "Anna", event: "error", detail: "lane ended: Gehalt" },
+		],
+		{},
+		now,
+		false,
+	);
+	assert.match(text, /Anna · done · from anna@x\.de · 42 s/);
+	assert.doesNotMatch(text, /Gehalt|Entwurf/);
+	assert.match(text, /Only who and when/);
 });
 
 test("lane identity comes from the environment", () => {

@@ -7,8 +7,9 @@
  * prompts for the same lane continue its session. What a person types, and
  * what a slash command they just ran sends, stays in the front session.
  *
- * Inside a lane this extension does nothing but offer `lanes_journal`: a lane
- * never routes again, so there is no recursion.
+ * Inside a lane this extension never routes again, so there is no recursion.
+ * What it does there is keep the lane to itself (see isolation.ts): tool
+ * rules, its own conversation, no access to other lanes' files.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -16,7 +17,8 @@ import { getAgentDir, getConfigPath, loadConfig, type ResolvedLanesConfig } from
 import { laneIdentity } from "./lane.ts";
 import { LanePool } from "./pool.ts";
 import { controlOf, decideRoute, HINT_CHANNEL, HintStore, isFrontSession, labelFor } from "./router.ts";
-import { excerpt } from "./journal.ts";
+import { excerpt, lanesHome } from "./journal.ts";
+import { checkCall, CHILD_ENV, roleOf, WORKSPACE_ENV, type Guard } from "./isolation.ts";
 import { lanesJournalTool } from "./tools.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -24,6 +26,11 @@ import { lanesJournalTool } from "./tools.ts";
 export default function (pi: ExtensionAPI) {
 	const self = laneIdentity();
 	const hints = new HintStore();
+
+	// Decided once, before this process starts anything: a lane marks what it
+	// starts as its children, and they inherit the mark.
+	const role = roleOf();
+	if (role === "lane") process.env[CHILD_ENV] = String(process.pid);
 
 	let config: ResolvedLanesConfig = loadConfig().config;
 	let pool: LanePool | undefined;
@@ -112,6 +119,25 @@ export default function (pi: ExtensionAPI) {
 			request: hint?.request ?? excerpt(event.text, 160),
 		});
 		return { action: "handled" };
+	});
+
+	pi.on("tool_call", async (event: any, ctx: any) => {
+		if (!role) return;
+		const isolation = config.isolation;
+		const workspace = isolation.workspace;
+		const guard: Guard = {
+			protectedPaths: [lanesHome(getAgentDir()), ...isolation.protectedPaths],
+			...(workspace ? { workspace: { root: workspace, own: process.env[WORKSPACE_ENV] } } : {}),
+		};
+		const reason = checkCall({
+			role,
+			tool: event.toolName,
+			input: event.input,
+			cwd: ctx?.cwd ?? process.cwd(),
+			config: isolation,
+			guard,
+		});
+		if (reason) return { block: true, reason: `pi-lanes: ${reason}` };
 	});
 
 	pi.registerTool({

@@ -27,6 +27,7 @@ import { join } from "node:path";
 import type { ResolvedLanesConfig } from "./config.ts";
 import { appendJournal, excerpt, lanesHome, type JournalEntry, type JournalEvent } from "./journal.ts";
 import { laneEnv, type LaneIdentity } from "./lane.ts";
+import { laneWorkspace, WORKSPACE_ENV } from "./isolation.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,11 +119,24 @@ interface Lane {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Session directory of a lane. Hashed: keys contain ':' and '@'. One-off lanes share one. */
+/** Short, file-system safe name of a lane key. Keys contain ':' and '@'. */
+export function laneHash(lane: string): string {
+	return createHash("sha256").update(lane).digest("hex").slice(0, 16);
+}
+
+/** Session directory of a lane. One-off lanes share one. */
 export function laneSessionDir(agentDir: string, lane: string, oneShot = false): string {
 	if (oneShot) return join(lanesHome(agentDir), "sessions", "once");
-	const key = createHash("sha256").update(lane).digest("hex").slice(0, 16);
-	return join(lanesHome(agentDir), "sessions", key);
+	return join(lanesHome(agentDir), "sessions", laneHash(lane));
+}
+
+/**
+ * Working directory of a lane: its own one below `isolation.workspace`, or the
+ * shared cwd. A one-off lane gets a directory of its own too, since two of them
+ * can run for different people at the same time.
+ */
+export function laneCwd(root: string | undefined, lane: string, fallback: string): string {
+	return root ? laneWorkspace(root, laneHash(lane)) : fallback;
 }
 
 /** Whether the lane's last session is recent enough to continue. */
@@ -398,11 +412,27 @@ export class LanePool {
 			...(resume ? ["--continue"] : ["--name", `lane: ${job.label}`]),
 		];
 
+		const root = this.config.isolation.workspace;
+		const cwd = laneCwd(root, job.lane, this.options.cwd);
+		if (root) {
+			try {
+				mkdirSync(cwd, { recursive: true, mode: 0o700 });
+			} catch {
+				/* spawn reports the real problem */
+			}
+		}
+
 		let proc: LaneProcess;
 		try {
 			proc = this.spawnLane(this.config.command, args, {
-				cwd: this.options.cwd,
-				env: { ...(this.options.env ?? process.env), ...this.config.env, ...(job.env ?? {}), ...laneEnv(identity) },
+				cwd,
+				env: {
+					...(this.options.env ?? process.env),
+					...this.config.env,
+					...(job.env ?? {}),
+					...laneEnv(identity),
+					...(root ? { [WORKSPACE_ENV]: cwd } : {}),
+				},
 			});
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);

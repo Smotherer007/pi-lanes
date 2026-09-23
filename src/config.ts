@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveIsolation, type IsolationConfig, type ResolvedIsolation } from "./isolation.ts";
 
 export type UnhintedRoute = "lane" | "session";
 
@@ -44,6 +45,8 @@ export interface LanesConfig {
 	 * and waiting for the answer in this session.
 	 */
 	userGraceSeconds?: number;
+	/** What a lane, and everything it starts, may reach. See isolation.ts. */
+	isolation?: IsolationConfig;
 }
 
 export interface ResolvedLanesConfig {
@@ -59,6 +62,7 @@ export interface ResolvedLanesConfig {
 	resetWords: string[];
 	unhinted: UnhintedRoute;
 	userGraceSeconds: number;
+	isolation: ResolvedIsolation;
 }
 
 export const DEFAULTS: ResolvedLanesConfig = {
@@ -74,6 +78,7 @@ export const DEFAULTS: ResolvedLanesConfig = {
 	resetWords: ["neues thema", "new topic", "reset"],
 	unhinted: "lane",
 	userGraceSeconds: 10,
+	isolation: resolveIsolation(undefined),
 };
 
 const BOUNDS = {
@@ -125,6 +130,7 @@ export function resolveConfig(value: LanesConfig | undefined): ResolvedLanesConf
 		resetWords: words(v.resetWords, DEFAULTS.resetWords),
 		unhinted: v.unhinted === "session" ? "session" : "lane",
 		userGraceSeconds: clamp(v.userGraceSeconds, BOUNDS.userGraceSeconds, DEFAULTS.userGraceSeconds),
+		isolation: resolveIsolation(v.isolation),
 	};
 }
 
